@@ -21,3 +21,9 @@ Added debounced switch using ezButton from https://github.com/ArduinoGetStarted/
    2. SW1 does a reset of the board
    3. Momentarily pressing SW2 will change buzzer state on release.
    4. Pressing and holding SW2 for more than 4 seconds will reset the wireless settings by deleting the ssid.txt and pwd.txt files
+
+## Programming Steps
+The WiFi manager uses the SPIFFS, so a SPIFFS partition will need to be created as part of the programming steps. If using PlatformIO on  VSCode, the following steps work:
+1. Build Filesystem image
+2. Upload Filesystem image
+3. Then compile and upload the compiled ELF file via upload

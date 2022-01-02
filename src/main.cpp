@@ -11,11 +11,10 @@
 #define DEBOUNCE_TIME 4000 // the debounce time in millisecond, increase this time if it still chatters
 
 // the number of the LED pin
-const int buzzerPin = 32;  // 16 corresponds to GPIO16
-const int buttonPin = 5;  // 16 corresponds to GPIO16
+const int buzzerPin = 32;
+const int buttonPin = 5;
 
-ezButton button(buttonPin); // create ezButton object that attach to pin GIOP21
-
+ezButton button(buttonPin); // create ezButton object that attach to buttonPin
 
 // setting PWM properties
 const int freq = 256;
@@ -23,35 +22,6 @@ const int buzzerChannel = 0;
 const int resolution = 8;
 
 bool buzzerState = false;
-
-void listAllFiles(){
- 
-  File root = SPIFFS.open("/");
- 
-  File file = root.openNextFile();
- 
-  while(file){
- 
-      Serial.print("FILE: ");
-      Serial.println(file.name());
- 
-      file = root.openNextFile();
-      delayMicroseconds(5);
-  }
- 
-}
-
-void IRAM_ATTR buttonChange() {
-  if (buzzerState == false) {
-    // turn buzzer on
-    ledcWrite(buzzerChannel, 20);
-    buzzerState=true;
-  } else {
-    // turn buzzer off
-    ledcWrite(buzzerChannel, 0);
-    buzzerState=false;
-  }
-}
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -84,9 +54,18 @@ const long interval = 10000;  // interval to wait for Wi-Fi connection (millisec
 
 // Set LED GPIO
 const int ledPin = 22;
-// Stores LED state
 
-String ledState;
+void IRAM_ATTR buttonChange() {
+  if (buzzerState == false) {
+    // turn buzzer on
+    ledcWrite(buzzerChannel, 20);
+    buzzerState=true;
+  } else {
+    // turn buzzer off
+    ledcWrite(buzzerChannel, 0);
+    buzzerState=false;
+  }
+}
 
 // Initialize SPIFFS
 void initSPIFFS() {
