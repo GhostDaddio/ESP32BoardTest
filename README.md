@@ -1,6 +1,6 @@
 
 # Board Test with WiFi
-Based on RandomNerdTutorials web page on ESP32 WiFi Manager (https://randomnerdtutorials.com/esp32-wi-fi-manager-asyncwebserver/) which saves WiFi secret info in a SPIFFS directory on the FLASH.
+Based on RandomNerdTutorials web page on ESP32 WiFi Manager (https://randomnerdtutorials.com/esp32-wi-fi-manager-asyncwebserver/) which saves WiFi secret info in a SPIFFS directory on the FLASH.  This is also based on https://iotespresso.com/esp32-launch-captive-portal-only-if-wifi-connect-fails/ to create the captive portal that loads the configuration page as soon as you connect to it in AP mode.
 
 Added ArduinoOTA to allow programming over the air.
 

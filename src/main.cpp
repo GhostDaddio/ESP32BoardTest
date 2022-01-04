@@ -1,14 +1,10 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
-#include "SPIFFS.h"
-#include <ESPmDNS.h>
-#include <WiFiUdp.h>
-#include <ArduinoOTA.h>
 #include <ezButton.h>  // https://github.com/ArduinoGetStarted/button
+#include "wifi_n_ota.h"
 
 #define DEBOUNCE_TIME 4000 // the debounce time in millisecond, increase this time if it still chatters
+
+#define WIFI_DEBUG  // prints debug output to Serial port if defined
 
 // the number of the LED pin
 const int buzzerPin = 32;
@@ -23,14 +19,6 @@ const int resolution = 8;
 
 bool buzzerState = false;
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
-
-// Search for parameter in HTTP POST request
-const char* PARAM_INPUT_1 = "ssid";
-const char* PARAM_INPUT_2 = "pass";
-const char* PARAM_INPUT_3 = "ip";
-
 //Variables to save values from HTML form
 String ssid;
 String pass;
@@ -41,16 +29,10 @@ const char* ssidPath = "/ssid.txt";
 const char* passPath = "/pass.txt";
 const char* ipPath = "/ip.txt";
 
-IPAddress localIP;
-//IPAddress localIP(192, 168, 1, 200); // hardcoded
-
-// Set your Gateway IP address
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 0, 0);
-
-// Timer variables
-unsigned long previousMillis = 0;
-const long interval = 10000;  // interval to wait for Wi-Fi connection (milliseconds)
+// Search for parameter in HTTP POST request
+const char* PARAM_INPUT_1 = "ssid";
+const char* PARAM_INPUT_2 = "pass";
+const char* PARAM_INPUT_3 = "ip";
 
 // Set LED GPIO
 const int ledPin = 22;
@@ -70,18 +52,18 @@ void IRAM_ATTR buttonChange() {
 // Initialize SPIFFS
 void initSPIFFS() {
   if (!SPIFFS.begin(true)) {
-    Serial.println("An error has occurred while mounting SPIFFS");
+    DEBUG_PRINTLN("An error has occurred while mounting SPIFFS");
   }
-  Serial.println("SPIFFS mounted successfully");
+  DEBUG_PRINTLN("SPIFFS mounted successfully");
 }
 
 // Read File from SPIFFS
 String readFile(fs::FS &fs, const char * path){
-  Serial.printf("Reading file: %s\r\n", path);
+  DEBUG_PRINTF("Reading file: %s\r\n", path);
 
   File file = fs.open(path);
   if(!file || file.isDirectory()){
-    Serial.println("- failed to open file for reading");
+    DEBUG_PRINTLN("- failed to open file for reading");
     return String();
   }
   
@@ -95,82 +77,22 @@ String readFile(fs::FS &fs, const char * path){
 
 // Write file to SPIFFS
 void writeFile(fs::FS &fs, const char * path, const char * message){
-  Serial.printf("Writing file: %s\r\n", path);
+  DEBUG_PRINTF("Writing file: %s\r\n", path);
 
   File file = fs.open(path, FILE_WRITE);
   if(!file){
-    Serial.println("- failed to open file for writing");
+    DEBUG_PRINTLN("- failed to open file for writing");
     return;
   }
   if(file.print(message)){
-    Serial.println("- file written");
+    DEBUG_PRINTLN("- file written");
   } else {
-    Serial.println("- file write failed");
+    DEBUG_PRINTLN("- file write failed");
   }
 }
 
 void deleteFile(fs::FS &fs, const char * path){
   fs.remove(path);
-}
-
-// Initialize WiFi
-bool initWiFi() {
-  if(ssid=="" || ip==""){
-    Serial.println("Undefined SSID or IP address.");
-    return false;
-  }
-
-  WiFi.mode(WIFI_STA);
-  localIP.fromString(ip.c_str());
-
-  if (!WiFi.config(localIP, gateway, subnet)){
-    Serial.println("STA Failed to configure");
-    return false;
-  }
-  WiFi.begin(ssid.c_str(), pass.c_str());
-  Serial.println("Connecting to WiFi...");
-
-  unsigned long currentMillis = millis();
-  previousMillis = currentMillis;
-
-  while(WiFi.status() != WL_CONNECTED) {
-    currentMillis = millis();
-    if (currentMillis - previousMillis >= interval) {
-      Serial.println("Failed to connect.");
-      return false;
-    }
-  }
-
-  ArduinoOTA
-    .onStart([]() {
-      String type;
-      if (ArduinoOTA.getCommand() == U_FLASH)
-        type = "sketch";
-      else // U_SPIFFS
-        type = "filesystem";
-
-      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      Serial.println("Start updating " + type);
-    })
-    .onEnd([]() {
-      Serial.println("\nEnd");
-    })
-    .onProgress([](unsigned int progress, unsigned int total) {
-      Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    })
-    .onError([](ota_error_t error) {
-      Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
-
-  ArduinoOTA.begin();
-
-  Serial.println(WiFi.localIP());
-  return true;
 }
 
 // Replaces placeholder with LED state value
@@ -211,17 +133,19 @@ void setup() {
   ssid = readFile(SPIFFS, ssidPath);
   pass = readFile(SPIFFS, passPath);
   ip = readFile(SPIFFS, ipPath);
-  Serial.println(ssid);
-  Serial.println(pass);
-  Serial.println(ip);
+  DEBUG_PRINTLN(ssid);
+  DEBUG_PRINTLN(pass);
+  DEBUG_PRINTLN(ip);
 
-  if(initWiFi()) {
-    // Route for root / web page
+  if (startWiFi(ssid, pass, ip)) {  // successfully started up as client, not in AP mode
+    // custom server responses
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(SPIFFS, "/index.html", "text/html", false, processor);
     });
+    server.onNotFound([](AsyncWebServerRequest *request) {
+      request->send(SPIFFS, "/index.html", "text/html", false, processor);
+    });
     server.serveStatic("/", SPIFFS, "/");
-    
     // Route to set GPIO state to HIGH
     server.on("/on", HTTP_GET, [](AsyncWebServerRequest *request) {
       digitalWrite(ledPin, LOW);
@@ -247,25 +171,8 @@ void setup() {
       buzzerState = false;
       request->send(SPIFFS, "/index.html", "text/html", false, processor);
     });
-    server.begin();
-  }
-  else {
-    // Connect to Wi-Fi network with SSID and password
-    Serial.println("Setting AP (Access Point)");
-    // NULL sets an open Access Point
-    WiFi.softAP("ESP-WIFI-MANAGER", NULL);
-
-    IPAddress IP = WiFi.softAPIP();
-    Serial.print("AP IP address: ");
-    Serial.println(IP); 
-
-    // Web Server Root URL
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-      request->send(SPIFFS, "/wifimanager.html", "text/html");
-    });
-    
-    server.serveStatic("/", SPIFFS, "/");
-    
+ }
+  else  {  // started in AP mode
     server.on("/", HTTP_POST, [](AsyncWebServerRequest *request) {
       int params = request->params();
       for(int i=0;i<params;i++){
@@ -274,37 +181,37 @@ void setup() {
           // HTTP POST ssid value
           if (p->name() == PARAM_INPUT_1) {
             ssid = p->value().c_str();
-            Serial.print("SSID set to: ");
-            Serial.println(ssid);
+            DEBUG_PRINT("SSID set to: ");
+            DEBUG_PRINTLN(ssidt);
             // Write file to save value
             writeFile(SPIFFS, ssidPath, ssid.c_str());
           }
           // HTTP POST pass value
           if (p->name() == PARAM_INPUT_2) {
             pass = p->value().c_str();
-            Serial.print("Password set to: ");
-            Serial.println(pass);
+            DEBUG_PRINT("Password set to: ");
+            DEBUG_PRINTLN(pass);
             // Write file to save value
             writeFile(SPIFFS, passPath, pass.c_str());
           }
           // HTTP POST ip value
           if (p->name() == PARAM_INPUT_3) {
             ip = p->value().c_str();
-            Serial.print("IP Address set to: ");
-            Serial.println(ip);
+            DEBUG_PRINT("IP Address set to: ");
+            DEBUG_PRINTLN(ip);
             // Write file to save value
             writeFile(SPIFFS, ipPath, ip.c_str());
           }
-          //Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
+          //DEBUG_PRINTF("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
         }
       }
       request->send(200, "text/plain", "Done. ESP will restart, connect to your router and go to IP address: " + ip);
       delay(3000);
       ESP.restart();
     });
-    server.begin();
   }
-
+  server.begin();
+ 
   // initialize digital pin LED_BUILTIN as an output.
   pinMode(ledPin, OUTPUT);
   ledcSetup(buzzerChannel, freq, resolution);
@@ -316,17 +223,17 @@ void setup() {
 
 // the loop function runs over and over again forever
 void loop() {
-  ArduinoOTA.handle();
+  handleWiFi();
   button.loop(); // MUST call the loop() function first
 
   if (button.isPressed())  {
     deleteFile(SPIFFS, ssidPath);
-    Serial.println("ssid.txt deleted");
+    DEBUG_PRINTLN("ssid.txt deleted");
     deleteFile(SPIFFS, passPath);
-    Serial.println("pass.txt deleted");
+    DEBUG_PRINTLN("pass.txt deleted");
   }
 
   if (button.isReleased())  {
-    Serial.println("The button is released");
+    DEBUG_PRINTLN("The button is released");
   }
 }
