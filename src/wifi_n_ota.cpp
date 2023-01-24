@@ -3,6 +3,7 @@ DNSServer dnsServer;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
+boolean bUseDNS = true;
 
 // Set your Gateway IP address
 IPAddress gateway(192, 168, 1, 1);
@@ -85,7 +86,9 @@ bool initWiFi(String ssid, String pass, String ip) {
 }
 
 bool handleWiFi()  {
-    dnsServer.processNextRequest();
+    if (bUseDNS)  {
+      dnsServer.processNextRequest();
+    }
     ArduinoOTA.handle();
     return true;       
 }
@@ -93,6 +96,7 @@ bool handleWiFi()  {
 
 bool startWiFi(String ssid, String pass, String ip)  {
   if(initWiFi(ssid, pass,  ip)) {
+    bUseDNS=false;
     return true;
   }
   else {
